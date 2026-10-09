@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizador Correo — Respuestas y tiempos por conversación</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>Analizador Correo</h1>
+    <p class="sub">Respuestas y tiempos en buzón compartido · 100% local, los correos no salen de tu equipo</p>
+  </div>
+  <div class="top-actions">
+    <button id="btnDemo" class="btn ghost" type="button">Ver ejemplo</button>
+    <button id="btnReset" class="btn ghost" type="button" hidden>Analizar otros correos</button>
+  </div>
+</header>
+
+<main>
+  <!-- Paso 1: carga -->
+  <section id="dropZone" class="drop" tabindex="0" role="button" aria-label="Cargar correos">
+    <div class="drop-icon">📧</div>
+    <p><strong>Arrastra los <code>.eml</code> del buzón compartido</strong> o haz clic para elegirlos</p>
+    <p class="hint">Outlook en la web: abre el buzón compartido y descarga los correos (.eml) · Se analizan por hilo de asunto</p>
+    <input id="fileInput" type="file" accept=".eml,message/rfc822" multiple hidden>
+    <div id="loadProgress" class="progress" hidden><div class="bar"></div><span>Cargando…</span></div>
+  </section>
+
+  <!-- Paso 2: dashboard -->
+  <section id="dashboard" hidden>
+    <div class="fileline">
+      <span id="fileName"></span><span id="fileMeta" class="muted"></span>
+    </div>
+
+    <div class="controls">
+      <label>Ventana de respuesta
+        <select id="optWindow">
+          <option value="24">24 horas</option>
+          <option value="72">3 días</option>
+          <option value="168" selected>7 días</option>
+          <option value="720">30 días</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="optSupportOnly"> Solo contar respuesta del equipo de soporte</label>
+      <label>Mes
+        <div class="dd">
+          <button id="btnMonth" class="btn ghost" type="button">Mes: Todos</button>
+          <div id="monthPanel" class="dd-panel" hidden></div>
+        </div>
+      </label>
+      <label>Responde
+        <div class="dd">
+          <button id="btnResp" class="btn ghost" type="button">Responde: Todos</button>
+          <div id="respPanel" class="dd-panel" hidden></div>
+        </div>
+      </label>
+      <button id="btnRoster" class="btn ghost" type="button">Equipo de soporte (<span id="rosterCount">0</span>)</button>
+      <button id="btnCsv" class="btn" type="button">Exportar CSV</button>
+      <button id="btnJson" class="btn ghost" type="button">Exportar JSON</button>
+    </div>
+
+    <div id="rosterPanel" class="roster" hidden>
+      <p class="muted">Marca quiénes son soporte. Los mensajes de los demás <strong>no</strong> cuentan como respuesta cuando el filtro está activo. Sugerencia automática según respuestas.</p>
+      <div id="rosterList" class="roster-list"></div>
+    </div>
+
+    <div id="kpis" class="kpis"></div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Solicitan más</h2>
+        <div class="table-wrap flat"><table class="mini">
+          <thead><tr><th>#</th><th>Nombre</th><th>Casos</th><th>Espera prom.</th></tr></thead>
+          <tbody id="topReq"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>Responden más</h2>
+        <div class="table-wrap flat"><table class="mini">
+          <thead><tr><th>#</th><th>Nombre</th><th>Respuestas</th><th>Tpo. prom.</th></tr></thead>
+          <tbody id="topResp"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h2>Actividad</h2>
+        <select id="optGran">
+          <option value="week">Por semana</option>
+          <option value="month">Por mes</option>
+        </select>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart" height="160"></canvas>
+        <div id="chartTip" class="tip" hidden></div>
+      </div>
+      <p class="muted small">Correos recibidos + conversaciones nuevas. Pasa el cursor sobre cada barra para ver los valores.</p>
+    </div>
+
+    <div class="card">
+      <h2>Temas frecuentes</h2>
+      <p class="muted small">Palabras significativas de los asuntos, con su tiempo promedio. Clic en una fila para filtrar la tabla.</p>
+      <div class="table-wrap flat"><table class="mini">
+        <thead><tr><th>Tema</th><th>Casos</th><th>%</th><th>Tpo. prom.</th><th>Pend.</th></tr></thead>
+        <tbody id="topBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Conversaciones <span id="tblCount" class="muted"></span></h2>
+      <div class="filters">
+        <input id="fSearch" type="search" placeholder="Buscar asunto, solicitante o respondedor…">
+        <select id="fStatus">
+          <option value="">Todos</option>
+          <option value="respondido">Respondidos</option>
+          <option value="pendiente">Pendientes</option>
+          <option value="reabierto">Reabiertos</option>
+        </select>
+        <select id="fRange">
+          <option value="">Todo tiempo</option>
+          <option value="0-1h">0–1 h</option>
+          <option value="1-8h">1–8 h</option>
+          <option value="8-24h">8–24 h</option>
+          <option value="+24h">+24 h</option>
+        </select>
+        <select id="fTopic">
+          <option value="">Todo tema</option>
+        </select>
+        <select id="fConf">
+          <option value="">Toda confianza</option>
+          <option value="alta">Confianza alta</option>
+          <option value="media">Confianza media</option>
+        </select>
+      </div>
+      <div id="distRanges" class="dist" title="Clic en un rango para filtrar la tabla"></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>Asunto</th><th>Solicita</th><th>Fecha solicitud</th><th>Responde</th>
+          <th>Tiempo resp.</th><th>Estado</th><th>Conf.</th><th></th>
+        </tr></thead>
+        <tbody id="tblBody"></tbody>
+      </table></div>
+      <div class="pager">
+        <button id="pgPrev" class="btn ghost" type="button">← Anterior</button>
+        <span id="pgInfo" class="muted"></span>
+        <button id="pgNext" class="btn ghost" type="button">Siguiente →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detalle -->
+  <div id="drawer" class="drawer" hidden>
+    <div class="drawer-box">
+      <button id="drawerClose" class="btn ghost" type="button">✕ Cerrar</button>
+      <h2 id="dTitle"></h2>
+      <div id="dBody"></div>
+    </div>
+  </div>
+</main>
+
+<footer class="muted small">
+  Hilo = correos con el mismo asunto (sin Re:/Fwd:), con corte si hay más de 7 días sin mensajes.
+  Respuesta = primer correo posterior de otro remitente dentro de la ventana (confianza alta si viene encadenado con In-Reply-To/References).
+  Todo se procesa en tu navegador; ningún correo se sube a ningún servidor.
+</footer>
+
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
